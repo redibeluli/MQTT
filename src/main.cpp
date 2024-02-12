@@ -28,14 +28,24 @@ unsigned long lastMsg = 0;
 #define MSG_BUFFER_SIZE  (50)
 char msg[MSG_BUFFER_SIZE];
 
-int value = 0;
-int humidity = 0;
+
+int MQTT_retries = 0;
+int wifi_retries = 0;
 float t = 0.0;
 float h = 0.0;
 int poll_counter = 0;
 boolean sleep_mode = false;
 byte EEPROM_val = 0;
 byte byte1 = 7;
+
+void blink(){
+
+//digitalWrite(LED_BUILTIN, LOW);
+delay(100);
+//digitalWrite(LED_BUILTIN, HIGH);
+
+}
+
 
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
@@ -78,13 +88,15 @@ void reconnect() {
     if (client.connect(clientId.c_str(),"pi","espmaster6969")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("ESP/chatter", "{ \"MQTT SVR\" : \"Connected\"}");
+      snprintf (msg, MSG_BUFFER_SIZE, "{\"MQTT SVR\" : \"Connected with %d MQTT attempts\"}", MQTT_retries);
+      client.publish("ESP/chatter", msg);
       // ... and resubscribe
       client.subscribe("ESP/CMD");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
+      MQTT_retries++;
       // Wait 5 seconds before retrying
       delay(2500);
     }
@@ -106,6 +118,8 @@ WiFi.config(staticIP, gateway, subnet);
 while (WiFi.status() != WL_CONNECTED) {
   delay(500);
   Serial.print(".");
+  //track how many times you're connecting to Wifi
+  wifi_retries++;
 }
 
 Serial.println("");
@@ -113,25 +127,20 @@ Serial.println("WiFi connected");
 Serial.println("IP address: ");
 Serial.println(WiFi.localIP());
 
+//MQTT connection to raaspi broker 
 client.setServer(mqtt_server, 8883);
 client.setCallback(callback);
 
-//pinMode(LED_BUILTIN, OUTPUT); // LED pin as output.
-pinMode(DHT_Power, OUTPUT); // potentially power sensor on and off using GPIO
+//power sensor using GPIO to conserve power
+pinMode(DHT_Power, OUTPUT); 
 pinMode(Sleep_Mode, INPUT);
-//digitalWrite(LED_BUILTIN, HIGH);
-
-//EEPROM.begin(10);
-//delay(5);
-//EEPROM.put(5,42);
-//delay(4);
-//EEPROM.commit();
 
 
 digitalWrite(DHT_Power,HIGH);
 delay(1);
 dht.begin();
 delay(1000);
+
 }
 
 void loop() {
@@ -162,7 +171,7 @@ void loop() {
     Serial.println(t);
     Serial.println("% Humidity:");  
     Serial.println(h);
-    snprintf (msg, MSG_BUFFER_SIZE, "{\"temp\":%0.1lf,\"humidity\":%0.2lf}", t, h);
+    snprintf (msg, MSG_BUFFER_SIZE, "{\"temp\":%0.1lf,\"humidity\":%0.2lf,\"wifi\":%d }", t, h, wifi_retries);
     Serial.print("Publish message: ");
     Serial.println(msg);
     client.publish("ESP/chatter", msg);
@@ -171,10 +180,3 @@ void loop() {
   }
 }
 
-void blink(){
-
-//digitalWrite(LED_BUILTIN, LOW);
-delay(100);
-//digitalWrite(LED_BUILTIN, HIGH);
-
-}
